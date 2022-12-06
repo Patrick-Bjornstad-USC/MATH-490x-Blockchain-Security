@@ -14,21 +14,32 @@ class Network(object):
         self.decay = decay
         self.peers = np.full((n, 8), np.nan)
 
+    # Perform an iteration of the peer selection process for lost connections or initialization
     def fill_peers(self, mode, counter_rate=None):
         for i in range(self.n):
             row = self.peers[i, :]
+
+            # Handle initialization
             if mode == 'init':
                 pool = list(range(self.n))
                 pool.remove(i)
+
+            # Handle all other cases
             else:
                 pool = []
                 peers = row[~np.isnan(row)]
-                if mode == 'step_rand':
+
+                # Selection of neighbors - basic case
+                if mode == 'step_basic':
                     for peer in peers:
                         peer_int = int(peer)
                         peer_neighbors = self.peers[peer_int, :]
                         pool += list(peer_neighbors[~np.isnan(peer_neighbors)])
+
+                # Selection of neighbors, aggressive Sybil case
                 elif mode == 'step_aggro':
+
+                    # No counter strategy by honest nodes
                     if not counter_rate:
                         for peer in peers:
                             peer_int = int(peer)
@@ -40,6 +51,8 @@ class Network(object):
                             else:
                                 peer_neighbors = self.peers[peer_int, :]
                                 pool += list(peer_neighbors[~np.isnan(peer_neighbors)])
+
+                    # With counter strategy by honest nodes
                     else:
                         if np.random.binomial(1, counter_rate):
                             pool = copy.deepcopy(self.honest_ids)
@@ -54,23 +67,29 @@ class Network(object):
                                 else:
                                     peer_neighbors = self.peers[peer_int, :]
                                     pool += list(peer_neighbors[~np.isnan(peer_neighbors)])
+
+                # Remove duplicates and excluded nodes (already neighbors, self) from pool
                 pool = list(set(pool))
                 if np.float64(i) in pool:
                     pool.remove(np.float64(i))
                 for peer in peers:
                     if peer in pool:
                         pool.remove(peer)
+
+            # Actually fill lost neighbors with new peers
             for j in range(len(row)):
                 if np.isnan(row[j]):
                     ind = random.choice(list(range(len(pool))))
                     row[j] = pool.pop(ind)
 
+    # Perform one iteration of the lost connection process
     def decay_peers(self):
         for i in range(self.n):
             for j in range(8):
                 if np.random.binomial(1, self.decay):
                     self.peers[i, j] = np.nan
 
+    # Get the frequency of nodes for each case
     def get_proportions(self):
         props = [0, 0, 0, 0, 0, 0, 0, 0, 0]
         for i in range(self.n):
@@ -84,6 +103,7 @@ class Network(object):
         return props
 
 
+# Define a function that runs the simulation and plots
 def simulate_network(n, q, decay, T, mode, counter_rate, title, fname):
     proportions = np.zeros((9, T))
     net = Network(n, q, decay)
@@ -104,4 +124,5 @@ def simulate_network(n, q, decay, T, mode, counter_rate, title, fname):
     plt.legend()
     plt.savefig(fname)
 
+# Perform a simulation
 simulate_network(1000, 0.1, 0.05, 200, 'step_aggro', 0.5, 'Sybil Attack Simulation: Counter-Aggressive Case (Counter Rate = 0.5)', 'sim_counter2.png')
